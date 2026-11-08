@@ -48,6 +48,7 @@ class TanSuo(BasePackage):
         "chuzhanxiaohao",
         "fighting",
         "fighting_boss",
+        "fighting_box",  # <--- 【修改1】新增宝箱怪资源
         "quit_true",
         "tansuo",
         "tansuo_28",
@@ -72,6 +73,7 @@ class TanSuo(BasePackage):
         self.IMAGE_START = self.get_image_asset("start")
         self.IMAGE_CHUZHANXIAOHAO = self.get_image_asset("chuzhanxiaohao")
         self.IMAGE_FIGHT_BOSS = self.get_image_asset("fight_boss")
+        self.IMAGE_FIGHT_BOX = self.get_image_asset("fighting_box")  # <--- 【修改2】加载宝箱怪图片
         self.IMAGE_FIGHT_LITTLE_MONSTER = self.get_image_asset("fight_little_monster")
         self.IMAGE_QUIT = self.get_image_asset("quit")
         self.IMAGE_QUIT_TRUE = self.get_image_asset("quit_true")
@@ -267,8 +269,17 @@ class TanSuo(BasePackage):
 
                 case self.IMAGE_CHUZHANXIAOHAO.name:
                     self.start_click_count = 0  # 成功进入探索，重置计数器
-                    # 先判断boss面灵气
                     sleep()
+                    
+                    # 【修改3】最高优先级：先找宝箱UP小怪
+                    result_box = RuleImage(self.IMAGE_FIGHT_BOX)
+                    if result_box.match(score=0.7):
+                        Mouse.click(result_box.center_point())
+                        logger.ui("宝箱UP小怪")
+                        self.fight()
+                        continue  # 打完宝箱怪，直接进入下一次循环，不再判断下面的 Boss 和小怪
+
+                    # 其次判断 boss 面灵气
                     result = RuleImage(self.IMAGE_FIGHT_BOSS)
                     if result.match():
                         Mouse.click(result.center_point())
@@ -278,6 +289,7 @@ class TanSuo(BasePackage):
                         self.done()
 
                     else:
+                        # 最后找普通小怪
                         result = RuleImage(self.IMAGE_FIGHT_LITTLE_MONSTER)
                         if result.match(score=0.6):
                             Mouse.click(result.center_point())
