@@ -48,7 +48,6 @@ class TanSuo(BasePackage):
         "chuzhanxiaohao",
         "fighting",
         "fighting_boss",
-        "fighting_box",  # <--- 【修改1】新增宝箱怪资源
         "quit_true",
         "tansuo",
         "tansuo_28",
@@ -73,7 +72,6 @@ class TanSuo(BasePackage):
         self.IMAGE_START = self.get_image_asset("start")
         self.IMAGE_CHUZHANXIAOHAO = self.get_image_asset("chuzhanxiaohao")
         self.IMAGE_FIGHT_BOSS = self.get_image_asset("fight_boss")
-        self.IMAGE_FIGHT_BOX = self.get_image_asset("fighting_box")  # <--- 【修改2】加载宝箱怪图片
         self.IMAGE_FIGHT_LITTLE_MONSTER = self.get_image_asset("fight_little_monster")
         self.IMAGE_QUIT = self.get_image_asset("quit")
         self.IMAGE_QUIT_TRUE = self.get_image_asset("quit_true")
@@ -83,7 +81,6 @@ class TanSuo(BasePackage):
 
     def get_chapter_number(self) -> int | None:
         """返回当前界面可见的最大章节号，未识别到返回 None"""
-        # 章节列表固定在右侧，只识别 x>=900 的区域，减少全屏 OCR 开销；
         x = 900
         width, height = window_manager.current.client_width, window_manager.current.client_height
         result = RuleOcr(region=(x, 0, width - x, height)).get_raw_result()
@@ -91,11 +88,7 @@ class TanSuo(BasePackage):
         return max(chapters) if chapters else None
 
     def scroll_to_target_chapter(self) -> bool:
-        """滚动章节列表到目标章节，返回是否正常识别到章节列表
-
-        默认目标是第二十八章；GPU 版模型识别不到第二十八章，目标降为第二十七章，
-        并在到达后兜底滚两格，保证第二十八章也露出。每滚一次都重新识别。
-        """
+        """滚动章节列表到目标章节，返回是否正常识别到章节列表"""
         target = _target_chapter()
         chapter = self.get_chapter_number()
         if chapter is None:
@@ -106,12 +99,11 @@ class TanSuo(BasePackage):
             return True
 
         logger.ui(f"当前停留第{chapter}章，滚动到第{target}章")
-        # 滚轮落点需在章节列表上，move 只需一次，后续滚动都作用于此
         Mouse.move(point=Point(1030, 340))
         for _ in range(_MAX_SCROLL_TIMES):
             if bool(event_thread):
                 raise GUIStopException
-            Mouse.scroll(-3)  # 向下3格
+            Mouse.scroll(-3)
 
             self.sleep_interval()
             chapter = self.get_chapter_number()
@@ -121,9 +113,8 @@ class TanSuo(BasePackage):
             if chapter >= target:
                 logger.ui(f"已滚动到第{chapter}章")
                 if config.is_gpu:
-                    # GPU 版模型识别不到「第二十八章」，兜底再滚两格
                     logger.info("兜底再滚动两格")
-                    Mouse.scroll(-2)  # 向下2格
+                    Mouse.scroll(-2)
                     self.sleep_interval()
                 return True
             logger.info(f"当前第{chapter}章，继续滚动")
@@ -157,7 +148,9 @@ class TanSuo(BasePackage):
     def fight(self) -> None:
         flag_done: bool = False  # 是否已经结束
         point = None
-        sleep(2)
+        # 【随机化】进场等 0.8 ~ 1.2 秒
+        sleep(0.8, 1.2) 
+        
         while True:
             if bool(event_thread):
                 raise GUIStopException
@@ -170,12 +163,11 @@ class TanSuo(BasePackage):
             if self.has_temp_pop and RuleImage(self.global_assets.IMAGE_TEMP_POP).match():
                 finish_random_left_right()
                 logger.ui("关闭临时弹窗")
-                sleep(2)
+                sleep(1.5, 2.0)
                 continue
 
             _result = check_image_once(
                 [
-                    # self.global_image.IMAGE_VICTORY,
                     self.global_assets.IMAGE_FINISH,
                     *self.global_assets.ALL_FAIL_IMAGES,
                 ]
@@ -187,34 +179,28 @@ class TanSuo(BasePackage):
                     point = finish_random_left_right()
                 else:
                     Mouse.click(point)
-                sleep(2)
+                # 【随机化】结算等 1.0 ~ 1.5 秒
+                sleep(1.0, 1.5)
             elif flag_done:  # 没有匹配到图像，说明已经结束结算
                 logger.ui("战斗结束")
                 return
 
     @log_function_call
     def finish(self) -> None:
-        """boss战后的结束阶段
-
-        1.有掉落物，不需要点击，直接左上角退出即可
-
-        2.无掉落物，系统自动跳转出去
-
-        3.1、2出来之后，存在宝箱/妖气封印的可能，当前章节的小界面被关闭，需要右侧列表重新点开
-        """
+        """boss战后的结束阶段"""
         while True:
             if bool(event_thread):
                 raise GUIStopException
 
-            # 等待加载完毕
-            sleep(1.5, 2)
+            # 【随机化】等加载完毕 0.8 ~ 1.2 秒
+            sleep(0.8, 1.2)
 
             # 如果还在探索里，说明有掉落物，直接退出
             if RuleImage(self.IMAGE_CHUZHANXIAOHAO).match():
                 logger.ui("有掉落物，直接退出")
-                self.check_click(self.IMAGE_QUIT, timeout=3)
-                sleep(1)
-                self.check_click(self.IMAGE_QUIT_TRUE, timeout=5)
+                self.check_click(self.IMAGE_QUIT, timeout=2)
+                sleep(0.3, 0.6)  # 【随机化】
+                self.check_click(self.IMAGE_QUIT_TRUE, timeout=3)
 
             # 在探索进入的前置界面
             else:
@@ -255,7 +241,8 @@ class TanSuo(BasePackage):
             match result.name:
                 case self.IMAGE_TANSUO_28.name:  # 右侧列表按钮
                     Mouse.click(result.center_point())
-                    sleep(3)  # 等待行动动画
+                    # 【随机化】原来等3秒，改为等 1.2 ~ 1.8 秒
+                    sleep(1.2, 1.8) 
 
                 case self.IMAGE_TITLE_28.name:
                     logger.ui("准备进入探索")
@@ -265,21 +252,14 @@ class TanSuo(BasePackage):
                         logger.ui_warn("尝试进入探索失败3次")
                         self.start_click_count = 0  # 重置计数器
                         raise DailyLimitException("探索次数已达本日上限")
-                    sleep(2)
+                    # 【随机化】进图等 0.8 ~ 1.2 秒
+                    sleep(0.8, 1.2)
 
                 case self.IMAGE_CHUZHANXIAOHAO.name:
                     self.start_click_count = 0  # 成功进入探索，重置计数器
                     sleep()
                     
-                    # 【修改3】最高优先级：先找宝箱UP小怪
-                    result_box = RuleImage(self.IMAGE_FIGHT_BOX)
-                    if result_box.match(score=0.7):
-                        Mouse.click(result_box.center_point())
-                        logger.ui("宝箱UP小怪")
-                        self.fight()
-                        continue  # 打完宝箱怪，直接进入下一次循环，不再判断下面的 Boss 和小怪
-
-                    # 其次判断 boss 面灵气
+                    # 先判断boss面灵气
                     result = RuleImage(self.IMAGE_FIGHT_BOSS)
                     if result.match():
                         Mouse.click(result.center_point())
@@ -289,7 +269,7 @@ class TanSuo(BasePackage):
                         self.done()
 
                     else:
-                        # 最后找普通小怪
+                        # 找普通小怪
                         result = RuleImage(self.IMAGE_FIGHT_LITTLE_MONSTER)
                         if result.match(score=0.6):
                             Mouse.click(result.center_point())
@@ -297,7 +277,7 @@ class TanSuo(BasePackage):
                             self.fight()
                         else:
                             logger.ui("移动视角")
-                            sleep()
+                            sleep() # 原本就是自带的随机 sleep
                             y1 = 300
                             y2 = 550
                             x_middle = reference_size()[0] // 2
